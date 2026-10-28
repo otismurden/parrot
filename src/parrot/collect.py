@@ -1,6 +1,7 @@
 import ast
-import pathspec
 from pathlib import Path
+
+from parrot.models import Unit
 
 # Ignore non-program files and respect sensitive data
 SKIP = {".venv", "venv", "__pycache__", ".git", "node_modules"}
@@ -25,10 +26,10 @@ def collect_units(root):
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, 
                                  ast.AsyncFunctionDef, 
-                                 ast.ClasssDef)):
+                                 ast.ClassDef)):
                 units.append(Unit(
                     id=f"{file}:{node.lineno}",
-                    path=str(file)
+                    path=str(file),
                     name=node.name,
                     start=node.lineno,
                     end=node.end_lineno,

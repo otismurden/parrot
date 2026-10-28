@@ -1,5 +1,11 @@
 import typer
-from pathlib import pathlib
+from dotenv import load_dotenv
+from pathlib import Path
+
+from parrot.pipeline import run_pipeline
+from parrot.report.terminal import show
+
+load_dotenv()
 
 app = typer.Typer()
 
@@ -11,7 +17,7 @@ def main():
 
 @app.command()
 def scan(path: Path = typer.Argument(..., exists=True, file_okay=False),
-         no_llm: bool = typer.Option(False, "no-llm"),
+         no_llm: bool = typer.Option(False, "--no-llm"),
          max_llm_calls: int = 50):
     findings = run_pipeline(path, 
                             use_llm=not no_llm, 
