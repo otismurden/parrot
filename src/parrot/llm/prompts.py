@@ -1,3 +1,4 @@
+Author: Gavison
 from parrot.models import Candidate, Unit
 
 # Long units are cut so one huge class can't blow up the prompt
