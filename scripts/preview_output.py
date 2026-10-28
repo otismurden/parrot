@@ -6,7 +6,7 @@
 import sys
 
 from parrot.models import Candidate, Finding, Unit, Verdict
-from parrot.report import show, side_by_side, to_json
+from parrot.report import show, to_json
 
 INVOICE = Unit(
     id="shop/billing.py::compute_invoice_total", path="shop/billing.py", name="compute_invoice_total",
@@ -42,6 +42,43 @@ LEGACY = Unit(
 ''',
 )
 
+EXPORT_ORDERS = Unit(
+    id="shop/reports.py::export_orders", path="shop/reports.py", name="export_orders",
+    start=4, end=9, kind="function",
+    source='''def export_orders(orders, path):
+    with open(path, "w") as fh:
+        for o in orders:
+            fh.write(f"{o.id},{o.total}\\n")
+''',
+)
+
+EXPORT_CUSTOMERS = Unit(
+    id="shop/reports.py::export_customers", path="shop/reports.py", name="export_customers",
+    start=12, end=17, kind="function",
+    source='''def export_customers(customers, path):
+    with open(path, "w") as fh:
+        for c in customers:
+            fh.write(f"{c.id},{c.email}\\n")
+''',
+)
+
+LOYALTY = Unit(
+    id="shop/loyalty.py::award_points", path="shop/loyalty.py", name="award_points",
+    start=8, end=10, kind="function",
+    source='''def award_points(customer, amount):
+    customer.points += int(amount // 10)
+''',
+)
+
+OLD_TAX = Unit(
+    id="shop/utils.py::old_tax_rate", path="shop/utils.py", name="old_tax_rate",
+    start=40, end=41, kind="function",
+    source='''def old_tax_rate():
+    return 0.175
+''',
+)
+
+# one finding per label, so every colour and word can be checked
 FINDINGS = [
     Finding(
         Candidate("duplicate", [INVOICE, QUOTE], 1.0, "same file shop/billing.py"),
@@ -49,10 +86,26 @@ FINDINGS = [
                 suggestion="Extract compute_total(doc) and call it from both."),
     ),
     Finding(
-        Candidate("dead", [LEGACY], 1.0, "no references found"),
-        Verdict(is_issue=True, confidence=0.8, reason="Never called and not exported."),
+        Candidate("duplicate", [EXPORT_ORDERS, EXPORT_CUSTOMERS], 0.7, "same file shop/reports.py"),
+        Verdict(is_issue=True, confidence=0.6, reason="Same CSV scaffold; only the columns differ."),
     ),
-    Finding(Candidate("duplicate", [QUOTE, INVOICE], 0.7), None),
+    Finding(
+        Candidate("duplicate", [QUOTE, EXPORT_CUSTOMERS], 0.62),
+        Verdict(is_issue=False, confidence=0.85, reason="Similar shape, unrelated jobs."),
+    ),
+    Finding(Candidate("duplicate", [EXPORT_ORDERS, INVOICE], 0.61), None),
+    Finding(
+        Candidate("dead", [LEGACY], 1.0, "no references found"),
+        Verdict(is_issue=True, confidence=0.9, reason="Never called and not exported."),
+    ),
+    Finding(
+        Candidate("dead", [OLD_TAX], 1.0, "no references found"),
+        Verdict(is_issue=True, confidence=0.55, reason="Unreferenced, but may be read by a config loader."),
+    ),
+    Finding(
+        Candidate("dead", [LOYALTY], 1.0, "no references found"),
+        Verdict(is_issue=False, confidence=0.75, reason="Unused today; fits the planned loyalty feature."),
+    ),
 ]
 
 if __name__ == "__main__":
@@ -60,4 +113,3 @@ if __name__ == "__main__":
         print(to_json(FINDINGS))
     else:
         show(FINDINGS)
-        side_by_side(INVOICE, QUOTE)
