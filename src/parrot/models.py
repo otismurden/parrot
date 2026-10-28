@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 @dataclass
@@ -23,7 +23,7 @@ class Candidate:
 
 class Verdict(BaseModel):
     is_issue: bool
-    confidence: float
+    confidence: float = Field(ge=0, le=1)
     reason: str
     suggestion: str | None = None
 

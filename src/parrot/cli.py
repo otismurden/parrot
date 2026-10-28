@@ -5,7 +5,7 @@ import typer
 from dotenv import load_dotenv
 
 from parrot.pipeline import run_pipeline
-from parrot.report.terminal import show
+from parrot.report import show, to_json
 
 load_dotenv()
 
@@ -22,8 +22,12 @@ def main():
 @app.command()
 def scan(path: Annotated[Path, typer.Argument(exists=True, file_okay=False)],
          no_llm: Annotated[bool, typer.Option("--no-llm")] = False,
-         max_llm_calls: int = 50):
+         max_llm_calls: int = 50,
+         json: Annotated[bool, typer.Option("--json")] = False):
     findings = run_pipeline(path,
                             use_llm=not no_llm,
                             limit=max_llm_calls)
-    show(findings)
+    if json:
+        print(to_json(findings))
+    else:
+        show(findings)

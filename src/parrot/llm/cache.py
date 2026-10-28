@@ -11,17 +11,18 @@ _cache: dict[str, dict] = (
 )
 
 
-def _key(prompt: str) -> str:
-    return hashlib.sha256(prompt.encode()).hexdigest()
+def _key(model: str, prompt: str) -> str:
+    # The model is part of the key so switching models doesn't reuse verdicts
+    return hashlib.sha256(f"{model}\n{prompt}".encode()).hexdigest()
 
 
-def get(prompt: str) -> Verdict | None:
-    hit = _cache.get(_key(prompt))
+def get(model: str, prompt: str) -> Verdict | None:
+    hit = _cache.get(_key(model, prompt))
     return Verdict(**hit) if hit else None
 
 
-def put(prompt: str, verdict: Verdict) -> None:
-    _cache[_key(prompt)] = verdict.model_dump()
+def put(model: str, prompt: str, verdict: Verdict) -> None:
+    _cache[_key(model, prompt)] = verdict.model_dump()
 
 
 def save() -> None:

@@ -4,7 +4,8 @@ from pathlib import Path
 from parrot.models import Unit
 
 # Ignore non-program files and respect sensitive data
-SKIP = {".venv", "venv", "__pycache__", ".git", "node_modules"}
+SKIP = {".venv", "venv", "__pycache__", ".git", "node_modules",
+        ".tox", "build", "dist", "site-packages"}
 
 def collect_units(root):
     """
@@ -13,7 +14,7 @@ def collect_units(root):
     root = Path(root)
     units, trees = [], []
     for file in root.rglob("*.py"):
-        if SKIP & set(file.parts):
+        if SKIP & set(file.relative_to(root).parts):
             continue
         text = file.read_text(
                 encoding="utf-8",
@@ -24,13 +25,14 @@ def collect_units(root):
         except SyntaxError:
             continue
         trees.append(tree)
+        rel = file.relative_to(root).as_posix()
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, 
                                  ast.AsyncFunctionDef, 
                                  ast.ClassDef)):
                 units.append(Unit(
-                    id=f"{file.relative_to(root).as_posix()}:{node.lineno}",
-                    path=str(file),
+                    id=f"{rel}:{node.lineno}",
+                    path=rel,
                     name=node.name,
                     start=node.lineno,
                     end=node.end_lineno,

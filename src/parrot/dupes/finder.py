@@ -26,6 +26,15 @@ class Blank(ast.NodeTransformer):
         self.generic_visit(node)
         return node
 
+    def visit_Call(self, node):
+        # Keep plain call names so len(x) and sum(x) don't look the same,
+        # matching how attribute calls like x.append keep their name
+        func = node.func
+        self.generic_visit(node)
+        if isinstance(func, ast.Name):
+            node.func = func
+        return node
+
     def visit_Name(self, node):
         return ast.Name(id="_", ctx=node.ctx)
 

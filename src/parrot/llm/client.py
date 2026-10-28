@@ -33,7 +33,7 @@ def get_client() -> genai.Client:
 
 
 async def ask(prompt: str, tries: int = 3) -> Verdict | None:
-    if (hit := cache.get(prompt)) is not None:
+    if (hit := cache.get(MODEL, prompt)) is not None:
         return hit
 
     for attempt in range(tries):
@@ -48,18 +48,15 @@ async def ask(prompt: str, tries: int = 3) -> Verdict | None:
             await asyncio.sleep(2 ** attempt)  # waits 1s, 2s, 4s
             continue
 
-        text = (
-            (resp.text or "")
-            .strip()
-            .removeprefix("```json")
-            .removesuffix("```")
-            .strip()
-        )
+        # Take the outermost {...} so code fences or chatter around it are
+        # ignored
+        text = resp.text or ""
+        text = text[text.find("{"):text.rfind("}") + 1]
         try:
             verdict = Verdict.model_validate_json(text)
         except ValidationError:
             continue
-        cache.put(prompt, verdict)
+        cache.put(MODEL, prompt, verdict)
         return verdict
     return None
 
@@ -69,7 +66,11 @@ async def ask_gemma_all(cands: list[Candidate]) -> list[Finding]:
 
     async def limited(c: Candidate) -> Finding:
         async with sem:
-            return Finding(c, await ask(build_prompt(c)))
+            try:
+                return Finding(c, await ask(build_prompt(c)))
+            except errors.APIError:
+                # One bad request shouldn't lose every other verdict
+                return Finding(c, None)
 
     findings = await asyncio.gather(*(limited(c) for c in cands))
     cache.save()
