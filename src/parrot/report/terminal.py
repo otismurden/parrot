@@ -1,5 +1,6 @@
 """Terminal output for Parrot. Output by Albert Adrian Iovan."""
 
+import os
 from collections import Counter
 from importlib.metadata import PackageNotFoundError, version
 
@@ -10,7 +11,7 @@ from rich.rule import Rule
 from rich.syntax import Syntax
 from rich.table import Table
 
-from parrot.models import Finding, Unit
+from parrot.models import Finding, Unit, Verdict
 
 console = Console()
 
@@ -29,13 +30,19 @@ def _kind(f: Finding) -> str:
     return "dead" if f.candidate.kind == "dead" else "duplicate"
 
 
+def confidence(v: Verdict) -> float:
+    """Gemma sometimes answers 85 instead of 0.85; clamp the rest to 0-1."""
+    c = v.confidence / 100 if 1 < v.confidence <= 100 else v.confidence
+    return min(max(c, 0.0), 1.0)
+
+
 def _level(f: Finding) -> int | None:
     v = f.verdict
     if v is None:
         return None
     if not v.is_issue:
         return 2
-    return 0 if v.confidence >= SURE else 1
+    return 0 if confidence(v) >= SURE else 1
 
 
 def usefulness(f: Finding) -> str:
@@ -50,7 +57,7 @@ def bar(f: Finding) -> str:
     v = f.verdict
     if v is None:
         return "[dim]" + "░" * BAR_WIDTH + "[/dim]"
-    problem = v.confidence if v.is_issue else 1 - v.confidence
+    problem = confidence(v) if v.is_issue else 1 - confidence(v)
     filled = round(problem * BAR_WIDTH)
     colour = COLOURS[_level(f)]
     empty = "░" * (BAR_WIDTH - filled)
@@ -58,12 +65,36 @@ def bar(f: Finding) -> str:
 
 
 def top_duplicate(findings: list[Finding]) -> Finding | None:
+    """Gemma's most confident confirmed duplicate.
+
+    Ties go to the most copies, then the most lines.
+    """
     dupes = [f for f in findings
              if _kind(f) == "duplicate" and len(f.candidate.units) >= 2]
     confirmed = [f for f in dupes if f.verdict and f.verdict.is_issue]
+
+    def size(f: Finding) -> tuple[int, int]:
+        units = f.candidate.units
+        return len(units), sum(u.end - u.start for u in units)
+
     if confirmed:
-        return max(confirmed, key=lambda f: f.verdict.confidence)
-    return max(dupes, key=lambda f: f.candidate.score, default=None)
+        return max(confirmed,
+                   key=lambda f: (confidence(f.verdict), *size(f)))
+    return max(dupes, key=lambda f: (f.candidate.score, *size(f)),
+               default=None)
+
+
+def scan_root(findings: list[Finding]) -> str:
+    """Common folder of absolute paths; relative ones are already short."""
+    paths = [u.path for f in findings for u in f.candidate.units]
+    if not paths or not all(os.path.isabs(p) for p in paths):
+        return ""
+    return os.path.commonpath([os.path.dirname(p) for p in paths])
+
+
+def _where(u: Unit, root: str) -> str:
+    path = os.path.relpath(u.path, root) if root else u.path
+    return escape(f"{path}:{u.start}")
 
 
 def _version() -> str:
@@ -73,7 +104,7 @@ def _version() -> str:
         return "dev"
 
 
-def _section(title: str, findings: list[Finding]) -> None:
+def _section(title: str, findings: list[Finding], root: str) -> None:
     console.print()
     console.print(Rule(f"[bold]{title} ({len(findings)})[/bold]",
                        align="left", characters="━"))
@@ -86,9 +117,12 @@ def _section(title: str, findings: list[Finding]) -> None:
         # Paths, names and Gemma's text may contain [brackets], so escape
         # them before they reach Rich markup
         where = "\n".join(
-            f"{escape(u.path)}:{u.start}  [dim]{escape(u.name)}[/dim]"
+            f"{_where(u, root)}  [dim]{escape(u.name)}[/dim]"
             for u in f.candidate.units)
-        reason = escape(f.verdict.reason) if f.verdict else "not checked"
+        if f.verdict:
+            reason = escape(f.verdict.reason or "no reason given")
+        else:
+            reason = "not checked"
         grid.add_row(f"{bar(f)} {usefulness(f)}",
                      f"{where}\n[dim]{reason}[/dim]")
     console.print(grid)
@@ -104,8 +138,10 @@ def _summary(findings: list[Finding]) -> str:
 
 
 def show(findings: list[Finding]) -> None:
-    console.print(
-        f"[bold]parrot[/bold] {_version()} · {len(findings)} findings")
+    root = scan_root(findings)
+    where = f" in {escape(os.path.relpath(root))}" if root else ""
+    console.print(f"[bold]parrot[/bold] {_version()} · "
+                  f"{len(findings)} findings{where}")
     if not findings:
         console.print("[green]No duplicate or dead code found.[/green]")
         return
@@ -114,7 +150,7 @@ def show(findings: list[Finding]) -> None:
     if top:
         console.print()
         a, b = top.candidate.units[:2]
-        side_by_side(a, b)
+        side_by_side(a, b, root)
         if top.verdict and top.verdict.suggestion:
             console.print("[green]→ Gemma suggests:[/green] "
                           + escape(top.verdict.suggestion))
@@ -122,20 +158,20 @@ def show(findings: list[Finding]) -> None:
     for title, kind in (("Duplicates", "duplicate"), ("Dead code", "dead")):
         group = [f for f in findings if _kind(f) == kind]
         if group:
-            _section(title, group)
+            _section(title, group, root)
 
     console.print()
     console.print(_summary(findings))
 
 
-def side_by_side(a: Unit, b: Unit) -> None:
+def side_by_side(a: Unit, b: Unit, root: str = "") -> None:
     grid = Table.grid(expand=True, padding=(0, 1))
     grid.add_column(ratio=1)
     grid.add_column(ratio=1)
     grid.add_row(*(
-        Panel(Syntax(u.source, "python", line_numbers=True,
-                     start_line=u.start, word_wrap=True),
-              title=f"{escape(u.path)}:{u.start}", title_align="left")
+        Panel(Syntax(u.source or "# source unavailable", "python",
+                     line_numbers=True, start_line=u.start, word_wrap=True),
+              title=_where(u, root), title_align="left")
         for u in (a, b)
     ))
     console.print(grid)
