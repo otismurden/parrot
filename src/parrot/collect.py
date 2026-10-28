@@ -1,0 +1,43 @@
+import ast
+import pathspec
+from pathlib import Path
+
+# Ignore non-program files and respect sensitive data
+SKIP = {".venv", "venv", "__pycache__", ".git", "node_modules"}
+
+def collect_units(root):
+    """
+    Collect code units from the root node and return those units and the tree.
+    """
+    units, trees = [], []
+    for file in Path(root).rglob("*.py"):
+        if SKIP & set(file.parts):
+            continue
+        text = file.read_text(
+                encoding="utf-8",
+                errors="ignore")
+        try:
+            tree = ast.parse(text)
+        # Ignore nonfunctional code
+        except SyntaxError:
+            continue
+        trees.append(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, 
+                                 ast.AsyncFunctionDef, 
+                                 ast.ClasssDef)):
+                units.append(Unit(
+                    id=f"{file}:{node.lineno}",
+                    path=str(file)
+                    name=node.name,
+                    start=node.lineno,
+                    end=node.end_lineno,
+                    source=ast.get_source_segment(text,node),
+                    kind="class" if isinstance(node, ast.ClassDef)
+                        else "function",
+                    decorated=bool(node.decorator_list)
+                    ))
+
+    return units, trees
+
+
