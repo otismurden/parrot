@@ -11,7 +11,8 @@ def find_dead(units: list[Unit], trees: list[ast.Module]) -> list[Candidate]:
                 used.add(node.id)
             elif isinstance(node, ast.Attribute):
                 used.add(node.attr)
-            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            elif (isinstance(node, ast.Constant)
+                  and isinstance(node.value, str)):
                 used.add(node.value)
 
     dead = []

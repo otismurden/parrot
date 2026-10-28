@@ -4,7 +4,6 @@ from functools import lru_cache
 
 from dotenv import find_dotenv, load_dotenv
 from google import genai
-from google.genai import types
 from google.genai import errors
 
 from pydantic import ValidationError
@@ -16,6 +15,7 @@ from .prompts import build_prompt
 
 MODEL = "gemma-4-26b-a4b-it"  # check AI Studio for the newest Gemma
 MAX_CONCURRENT = 5
+TIMEOUT = 60  # seconds per request
 
 
 @lru_cache(maxsize=1)
@@ -25,11 +25,8 @@ def get_client() -> genai.Client:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY not set. Add it to .env")
-    
-    return genai.Client(
-        api_key=api_key,
-        http_options=types.HttpOptions(timeout=60_000),
-    )
+
+    return genai.Client(api_key=api_key)
 
 
 async def ask(prompt: str, tries: int = 3) -> Verdict | None:
@@ -38,9 +35,14 @@ async def ask(prompt: str, tries: int = 3) -> Verdict | None:
 
     for attempt in range(tries):
         try:
-            resp = await get_client().aio.models.generate_content(
-                model=MODEL, contents=prompt
-            )
+            # Timed out here rather than in the SDK, whose timeout error
+            # depends on which HTTP library is installed
+            async with asyncio.timeout(TIMEOUT):
+                resp = await get_client().aio.models.generate_content(
+                    model=MODEL, contents=prompt
+                )
+        except TimeoutError:
+            continue  # a hung request gets retried like any other failure
         except (errors.ServerError, errors.ClientError) as e:
             # 5xx = Google's problem, 429 = rate limit: wait, then retry
             if isinstance(e, errors.ClientError) and e.code != 429:
