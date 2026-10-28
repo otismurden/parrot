@@ -11,8 +11,9 @@ from parrot.models import Finding
 console = Console()
 
 def run_pipeline(path, use_llm, limit):
-    """ 
-    Collect units through static analysis with AST, and then find duplicate and dead units. 
+    """
+    Collect units with AST static analysis, then find duplicate and dead
+    units. Only the first `limit` suspects are sent to Gemma.
     """
     units, trees = collect_units(path)
 
@@ -23,6 +24,7 @@ def run_pipeline(path, use_llm, limit):
     if not use_llm:
         return [Finding(s, None) for s in suspects]
     with console.status("Querying Gemma"):
-        return asyncio.run(ask_gemma_all(suspects[:limit]))
+        checked = asyncio.run(ask_gemma_all(suspects[:limit]))
+    return checked + [Finding(s, None) for s in suspects[limit:]]
 
 

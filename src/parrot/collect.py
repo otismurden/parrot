@@ -10,8 +10,9 @@ def collect_units(root):
     """
     Collect code units from the root node and return those units and the tree.
     """
+    root = Path(root)
     units, trees = [], []
-    for file in Path(root).rglob("*.py"):
+    for file in root.rglob("*.py"):
         if SKIP & set(file.parts):
             continue
         text = file.read_text(
@@ -28,7 +29,7 @@ def collect_units(root):
                                  ast.AsyncFunctionDef, 
                                  ast.ClassDef)):
                 units.append(Unit(
-                    id=f"{file}:{node.lineno}",
+                    id=f"{file.relative_to(root).as_posix()}:{node.lineno}",
                     path=str(file),
                     name=node.name,
                     start=node.lineno,

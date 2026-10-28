@@ -1,19 +1,28 @@
-from parrot.models import Candidate, Unit
-import ast, copy, hashlib
+import ast
+import copy
+import hashlib
 from collections import defaultdict
-import difflib
+
+from parrot.models import Candidate, Unit
+
 
 class Blank(ast.NodeTransformer):
-    def __init__(self,local):
-        self.local = local
-        self.ids = {}
+    """Erase names, values and docstrings so only the code's shape is left."""
 
     def visit_FunctionDef(self, node):
         node.name = "_"
         node.decorator_list = []
-        if (node.body and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant)):
-            node.body = node.body[1:]
+        node.returns = None
+        _drop_docstring(node)
+        self.generic_visit(node)
+        return node
 
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_ClassDef(self, node):
+        node.name = "_"
+        node.decorator_list = []
+        _drop_docstring(node)
         self.generic_visit(node)
         return node
 
@@ -26,17 +35,32 @@ class Blank(ast.NodeTransformer):
         return node
 
     def visit_Constant(self, node):
-        return ast.Constant(value = "_")
+        return ast.Constant(value="_")
 
-def shape(unit):
+
+def _drop_docstring(node):
+    if ast.get_docstring(node, clean=False) is not None:
+        node.body = node.body[1:]
+
+
+def shape(unit: Unit) -> str:
     tree = Blank().visit(copy.deepcopy(ast.parse(unit.source)))
-    return hashlib.shal(ast.dump(tree).encode()).hexdigest()
+    return hashlib.sha1(ast.dump(tree).encode()).hexdigest()
 
-def find_dupes(units, min_lines = 5):
+
+def _inside(inner: Unit, outer: Unit) -> bool:
+    return (inner is not outer and inner.path == outer.path
+            and outer.start <= inner.start and inner.end <= outer.end)
+
+
+def find_dupes(units: list[Unit], min_lines: int = 5) -> list[Candidate]:
     groups = defaultdict(list)
     for u in units:
         if u.end - u.start + 1 >= min_lines:
             groups[shape(u)].append(u)
+    dupes = [g for g in groups.values() if len(g) > 1]
 
-    return [Candidate("duplicate", g, 1.0) for g in groups.values() if len(g) > 1]
-
+    # Methods of duplicated classes are already covered by the class match
+    flagged = [u for g in dupes for u in g]
+    return [Candidate("duplicate", g, 1.0) for g in dupes
+            if not all(any(_inside(u, o) for o in flagged) for u in g)]

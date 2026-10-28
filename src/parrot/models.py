@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+
 from pydantic import BaseModel
+
 
 @dataclass
 class Unit:
