@@ -6,6 +6,9 @@ from collections import defaultdict
 import difflib
 from parrot.models import Candidate, Unit
 
+def _drop_docstring(node):
+    if ast.get_docstring(node, clean=False) is not None:
+        node.body = node.body[1:]
 
 class Blank(ast.NodeTransformer):
 
@@ -37,12 +40,6 @@ class Blank(ast.NodeTransformer):
     def visit_Constant(self, node):
         return ast.Constant(value="_")
 
-
-def _drop_docstring(node):
-    if ast.get_docstring(node, clean=False) is not None:
-        node.body = node.body[1:]
-
-
 def shape(unit: Unit) -> str:
     tree = Blank().visit(copy.deepcopy(ast.parse(unit.source)))
     return hashlib.sha1(ast.dump(tree).encode()).hexdigest()
@@ -52,7 +49,6 @@ def find_dupes(units, min_lines = 3):
     for u in units:
         if u.end - u.start + 1 >= min_lines:
             groups[shape(u)].append(u)
-    dupes = [g for g in groups.values() if len(g) > 1]
 
     return [Candidate("duplicate", g, 1.0) for g in groups.values() if len(g) > 1]
 
