@@ -1,11 +1,14 @@
 # Author: Gavison
 import hashlib
 import json
+import os
 from pathlib import Path
 
 from parrot.models import Verdict
 
-CACHE_FILE = Path("cache.json")
+# Kept in the user cache dir so it's shared no matter where parrot runs from
+CACHE_FILE = (Path(os.getenv("XDG_CACHE_HOME") or Path.home() / ".cache")
+              / "parrot" / "cache.json")
 
 _cache: dict[str, dict] = (
     json.loads(CACHE_FILE.read_text()) if CACHE_FILE.exists() else {}
@@ -27,4 +30,5 @@ def put(model: str, prompt: str, verdict: Verdict) -> None:
 
 
 def save() -> None:
+    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
     CACHE_FILE.write_text(json.dumps(_cache, indent=2))

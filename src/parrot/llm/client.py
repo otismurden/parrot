@@ -6,7 +6,6 @@ from functools import lru_cache
 from dotenv import find_dotenv, load_dotenv
 from google import genai
 from google.genai import errors
-
 from pydantic import ValidationError
 
 from parrot.models import Candidate, Finding, Verdict

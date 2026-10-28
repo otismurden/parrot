@@ -1,7 +1,7 @@
 [project]
 name = "parrot"
 version = "0.1.0"
-description = "Add your description here"
+description = "Find duplicate and dead Python code, checked by Gemma"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

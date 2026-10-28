@@ -30,7 +30,8 @@ def _show(u: Unit) -> str:
 
 
 def build_prompt(c: Candidate) -> str:
-    template = DUPE_PROMPT if c.kind == "duplicate" else DEAD_PROMPT
+    # Exact and near-duplicates both get the duplicate prompt
+    template = DEAD_PROMPT if c.kind == "dead" else DUPE_PROMPT
     code = "\n\n".join(_show(u) for u in c.units)
     if c.context:
         code = f"Context: {c.context}\n\n{code}"

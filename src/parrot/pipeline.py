@@ -4,7 +4,7 @@ from rich.console import Console
 
 from parrot.collect import collect_units
 from parrot.dead.finder import find_dead
-from parrot.dupes.finder import find_dupes
+from parrot.dupes.finder import find_dupes, find_near_dupes
 from parrot.llm.client import ask_gemma_all
 from parrot.models import Candidate, Finding
 
@@ -21,7 +21,9 @@ def run_pipeline(path, use_llm, limit):
     units, trees = collect_units(path)
 
     # Suspects determined using static analysis
-    suspects = find_dupes(units) + find_dead(units, trees)
+    dupes = find_dupes(units)
+    suspects = (dupes + find_near_dupes(units, exact=dupes)
+                + find_dead(units, trees))
     # Highest score first, then biggest, so the limit keeps the best ones
     suspects.sort(key=lambda s: (s.score, _size(s)), reverse=True)
 

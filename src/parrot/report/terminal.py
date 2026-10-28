@@ -122,7 +122,8 @@ def _section(title: str, findings: list[Finding], root: str) -> None:
         if f.verdict:
             reason = escape(f.verdict.reason or "no reason given")
         else:
-            reason = "not checked"
+            reason = " · ".join(filter(None, [escape(f.candidate.context),
+                                              "not checked"]))
         grid.add_row(f"{bar(f)} {usefulness(f)}",
                      f"{where}\n[dim]{reason}[/dim]")
     console.print(grid)
